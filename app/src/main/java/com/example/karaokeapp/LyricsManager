@@ -1,0 +1,62 @@
+package com.example.karaokeapp
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.widget.TextView
+import android.media.MediaPlayer
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.util.regex.Pattern
+
+class LyricsManager(private val context: Context) {
+
+    private var lyricsTextView: TextView? = null
+    private var mPlayer: MediaPlayer? = null
+
+    // Methode zum Einlesen der .lrc-Datei aus den Raw-Ressourcen
+    fun loadLyricsFromRawResource(resourceId: Int): List<Pair<Long, String>> {
+        val lyrics = mutableListOf<Pair<Long, String>>()
+        try {
+            val inputStream = context.resources.openRawResource(resourceId)
+            val reader = BufferedReader(InputStreamReader(inputStream))
+            var line: String?
+
+            while (reader.readLine().also { line = it } != null) {
+                val pattern = Pattern.compile("\\[(\\d+):(\\d+\\.\\d+)](.*)")
+                val matcher = pattern.matcher(line!!)
+                if (matcher.matches()) {
+                    val minutes = matcher.group(1).toLong()
+                    val seconds = matcher.group(2).toDouble()
+                    val lyric = matcher.group(3)
+                    val timestamp = (minutes * 60 * 1000 + (seconds * 1000).toLong())
+                    lyrics.add(Pair(timestamp, lyric))
+                }
+            }
+            reader.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return lyrics
+    }
+
+    // Methode zur Synchronisation der Lyrics
+    fun syncLyricsWithAudio(player: MediaPlayer, lyricsList: List<Pair<Long, String>>, lyricsTextView: TextView?) {
+        this.lyricsTextView = lyricsTextView
+        mPlayer = player
+
+        val syncDelay = 2000L
+        val handler = Handler(Looper.getMainLooper())
+        handler.post(object : Runnable {
+            override fun run() {
+                if (mPlayer?.isPlaying == true) {
+                    val currentPosition = mPlayer?.currentPosition?.toLong() ?: 0L
+                    val currentLyric = lyricsList.lastOrNull { it.first <= currentPosition }?.second
+                    lyricsTextView?.text = currentLyric
+                    handler.postDelayed(this, 50) // Update alle 50ms
+                }
+            }
+        })
+    }
+
+}
